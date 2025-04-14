@@ -1,0 +1,144 @@
+﻿@{
+	ViewData["Title"] = "Index";
+	ViewData["HeaderTitle"] = "Hóa đơn";
+	Layout = "~/Views/Shared/_CustomerLayout.cshtml";
+}
+<div class="container py-4">
+	<h2 class="mb-4">Giỏ hàng của bạn</h2>
+	<div id="cartPageContent"></div>
+</div>
+
+@section Scripts {
+	<script>
+		function formatVND(amount) {
+			return amount.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
+		}
+
+		function removeCartItem(index) {
+			const cart = JSON.parse(localStorage.getItem("cart")) || [];
+			cart.splice(index, 1);
+			localStorage.setItem("cart", JSON.stringify(cart));
+			showCartPage();
+		}
+
+		function updateQuantity(index, change) {
+			const cart = JSON.parse(localStorage.getItem("cart")) || [];
+			if (index >= cart.length || index < 0) return;
+
+			cart[index].quantity += change;
+			if (cart[index].quantity < 1) cart[index].quantity = 1;
+
+			localStorage.setItem("cart", JSON.stringify(cart));
+			showCartPage();
+		}
+
+		function showCartPage() {
+			const container = document.getElementById("cartPageContent");
+			const localCart = localStorage.getItem("cart");
+
+			if (!localCart) {
+				container.innerHTML = "<p>Giỏ hàng trống.</p>";
+				return;
+			}
+
+			const cart = JSON.parse(localCart);
+			if (cart.length === 0) {
+				container.innerHTML = "<p>Giỏ hàng trống.</p>";
+				return;
+			}
+
+			container.innerHTML = "";
+			let totalPrice = 0;
+
+			cart.forEach((item, index) => {
+				totalPrice += item.totalMoney * item.quantity;
+
+				const toppingHtml = `
+						<div class="d-flex overflow-auto gap-2 mt-1 pb-1 toppings-scrollable" style="white-space: nowrap;">
+							${item.toppings.map(t => `
+								<div class="text-center">
+									<img src="${t.ImageUrl}" width="50" height="50" class="rounded" style="object-fit: cover;" />
+									<div style="font-size: 12px;">${t.Name}</div>
+								</div>
+							`).join("")}
+						</div>
+					`;
+
+				const html = `
+						<div class="card mb-3 shadow-sm">
+							<div class="d-flex justify-content-between align-items-center">
+								<div class="d-flex">
+									<div>
+											<img src="${item.imageUrl}" class="img-fluid rounded-start p-2" style="max-height: 150px; object-fit: contain;" />
+									</div>
+									<div class="p-2" style="width:300px"">
+										<h5 class="card-title">${item.name} (${item.size})</h5>
+										<div><strong>Toppings:</strong> ${item.toppings.length > 0 ? "" : "Không có topping"}</div>
+										<div>${toppingHtml}</div>
+									</div>
+								</div>
+								<div style="min-width:80px">
+										${formatVND(item.totalMoney)}
+								</div>
+								<div>
+									<div class="mt-3 d-inline-flex align-items-center border rounded px-2 py-1" style="width: fit-content;">
+										<button type="button" class="btn btn-danger btn-sm px-3 fw-bold" onclick="updateQuantity(${index}, -1)">−</button>
+										<input type="number" id="quantity_${index}" value="${item.quantity}" min="1" class="form-control form-control-sm text-center mx-2" style="width: 60px;" readonly />
+										<button type="button" class="btn btn-success btn-sm px-3 fw-bold" onclick="updateQuantity(${index}, 1)">+</button>
+									</div>
+								</div>
+								<div style="min-width:80px">
+									<p class="card-text mb-1" style="color: #8a733f">${formatVND(item.totalMoney * item.quantity)}</p>
+								</div>
+								<div class="pe-3">
+									<button class="btn btn-sm btn-danger" onclick="removeCartItem(${index})">
+										<i class="bi bi-trash"></i>
+									</button>
+								</div>
+							</div>
+						</div>
+					`;
+
+				container.innerHTML += html;
+			});
+
+			container.innerHTML += `
+				<div class="d-flex justify-content-between align-items-center py-2">
+						<span class="fw-bold text-danger fs-5">Tổng giá trị đơn hàng: ${formatVND(totalPrice)}</span>
+							<button class="btn btn-success" onclick="createOrder()">Đặt hàng</button>
+				</div>
+			`;
+		}
+
+		document.addEventListener("DOMContentLoaded", showCartPage);
+
+		function createOrder(){
+			const cart = JSON.parse(localStorage.getItem("cart")) || [];
+
+			let request = cart.map(item => ({
+				productId: item.productId,
+				size: item.size,
+				quantity: item.quantity,
+				toppings: item.toppings.map(t => t.Id)
+			}));
+
+			fetch("/customer/orders/create", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json"
+				},
+				body: JSON.stringify(request)
+			}).then(res => res.json())
+				.then(data => {
+					if (data.redirectUrl) {
+						window.location.href = data.redirectUrl;
+					} else {
+						console.error("Không nhận được redirectUrl");
+					}
+				})
+				.catch(err => {
+					console.error("Lỗi khi gửi giỏ hàng:", err);
+				});
+		}
+	</script>
+}
